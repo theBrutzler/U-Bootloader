@@ -12,7 +12,7 @@ I created a board!
 
 with interesting backside XD
 
-!\[Image 1](https://https://github.com/theBrutzler/U-Bootloader/SUB-tember\_Titan/Backside.png)
+!\[Image 2](https://https://github.com/theBrutzler/U-Bootloader/SUB-tember\_Titan/Backside.png)
 
 
 
