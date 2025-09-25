@@ -7,6 +7,7 @@
 #define OLED_SDA 17
 #define OLED_SCL 18
 Adafruit_SSD1306 display(128, 64, &Wire1); //, OLED_RESET);
+
 int y = 0;
 int x = 0;
 
@@ -25,6 +26,7 @@ int delayval = 100;
 #define pin          (4)  // D4 (ADC1)
 float sensorVal, Ethanol;
 SP3SAQ2 sensor(ADC_BIT_RESU, pin);
+#define ETH_HEAT 6
 
 //I2C_Sensors
 #define Sensor_SDA 39
@@ -41,10 +43,6 @@ TMP102 sensor0;
 #define SEALEVELPRESSURE_HPA (1013.25)
 Adafruit_BMP3XX BMP390;
 
-//DHT bzw SY-TH-36BP5(LCSC C19727297)
-#include <DFRobot_DHT20.h>
-DFRobot_DHT20 DHT(&Wire,0xB8);
-
 //VL53L8
 #include <vl53l8cx.h>
 #define LPN_PIN -1
@@ -58,45 +56,49 @@ uint8_t res = VL53L8CX_RESOLUTION_4X4;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
+  Serial.begin(115200); 
+  pinMode(ETH_HEAT, OUTPUT);
+  digitalWrite(ETH_HEAT, HIGH);
+  delay(2000);
+  Serial.print("Starting\n");
 
   //Display
   Wire1.begin(OLED_SDA, OLED_SCL);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C, false, false);
+  Serial.print("Display done\n");
 
   //RGB
 	strip.begin();
+	strip.setLedColorData(0, 10, 0, 0);
 	strip.setBrightness(10);
+	strip.show();
+  Serial.print("RGB done\n");
 
   //ETHANOL
   sensor.begin(); 
+  Serial.print("ETH done\n");
 
   //I2C Sensors
   Wire.begin(Sensor_SDA,Sensor_SCL);
-  sensor0.begin();  
-
-  //DHT
-  DHT.begin();
+  sensor0.begin(0x48, Wire);  
+  Serial.print("I2C done\n");
 
   //VL53L8
+  sensor_vl53l8cx_top.set_i2c_address(0x29);
   sensor_vl53l8cx_top.begin();
   status = sensor_vl53l8cx_top.init();
-  status = sensor_vl53l8cx_top.start_ranging();
+  Serial.print("VL53 done\n");
+
+  //BMP390
+  BMP390.begin_I2C(0x76,&Wire);
 
 
-
-
-
-
-
-  while (y < 8)
+  while (y < 64)
   {
-		strip.setLedColorData(0, m_color[y][0], m_color[y][1], m_color[y][2]);
-		strip.show();
-
     display.clearDisplay();
     display.setTextColor(WHITE);
     display.setCursor(0, 0);
-    display.print(F(" Junkies Easteregg "));
+    display.print(F(" U-BOOTLOADER "));
     display.drawBitmap(34, 10, block[x], 54, 54, WHITE);
     display.display();
     delay(100);
@@ -107,21 +109,38 @@ void setup() {
     y++;
   }
   display.clearDisplay();
+  display.display();
+
+  
+  Serial.print("Setup done\n");
 
 }
 
 void loop() {
+    display.clearDisplay();
+    Serial.print("Loop Start\n");
 
     //ETHANOL
     sensorVal = sensor.read();
-    Ethanol = sensor.calculateppm(sensorVal, 3);
+    Serial.print(F(" Ethanol raw: "));
+    Serial.println(sensorVal);
+    Ethanol = (sensorVal-0.55)/1.5;
+    if(Ethanol<=0)
+      Ethanol = 0;
     display.setCursor(0, 0);
     display.print(F(" Ethanol: "));
     display.println(Ethanol);
+
+    Serial.print(F(" Ethanol: "));
+    Serial.println(Ethanol);
+    Serial.print("Ethanol END\n");
     
     //TMP102
     sensor0.oneShot(1); // Set One-Shot bit
-    while(sensor0.oneShot() == 0); // Wait for conversion to be ready
+    //while(sensor0.oneShot() == 0); // Wait for conversion to be ready
+
+    Serial.print(F(" TempT: "));
+    Serial.println(sensor0.readTempC());  // Print temperature reading
       
     display.print(F(" TempT: "));
     display.println(sensor0.readTempC());  // Print temperature reading
@@ -131,31 +150,33 @@ void loop() {
     float temp = BMP390.temperature;         // °C
     float pressure_hPa = BMP390.pressure / 100.0;  // hPa
     float altitude_m = BMP390.readAltitude(SEALEVELPRESSURE_HPA);  // Höhe über NN
-    display.print("TempB: ");
+    display.print(" TempB: ");
     display.print(temp); // Print with 2 decimal places
-    display.println(" °C");
-    display.print("Pressure: ");
-    display.print((pressure_hPa*1000),2); // Convert Pa to hPa (hectopascals)
+    display.println(" C");
+    display.print(" PressB: ");
+    display.print((pressure_hPa/1000),2); // Convert Pa to hPa (hectopascals)
     display.println(" Bar");
+    display.print(" AltB: ");
+    display.println(altitude_m);
+    display.display();
 
-    //DHT
-    display.print("TempD: ");
-    display.print(DHT.getTemperature());
-    display.println(" °C");
-    display.print("HumiD: ");
-    display.print(DHT.getHumidity()*100);
-    display.println(" H");
+    Serial.print(" TempB: ");
+    Serial.print(temp); // Print with 2 decimal places
+    Serial.println(" °C");
+    Serial.print(" Pressure: ");
+    Serial.print((pressure_hPa/1000),2); // Convert Pa to hPa (hectopascals)
+    Serial.println(" Bar");
 
     //VL53L8C
     VL53L8CX_ResultsData Results;
     uint8_t NewDataReady = 0;
-    do {
-      status = sensor_vl53l8cx_top.check_data_ready(&NewDataReady);
-    } while (!NewDataReady);
-    if ((!status) && (NewDataReady != 0)) {
-      status = sensor_vl53l8cx_top.get_ranging_data(&Results);
+    
+    Serial.print("Sensor Start\n");
+
+      sensor_vl53l8cx_top.get_ranging_data(&Results);
       print_result(&Results);
-    }
+    Serial.print("Sensor END\n");
+    display.display();
 
     delay(1000);
 
